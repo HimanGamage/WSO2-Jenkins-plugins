@@ -11,7 +11,7 @@ import hudson.model.queue.QueueTaskFuture;
 import hudson.plugins.git.util.BuildData;
 import jenkins.model.Jenkins;
 
-import org.jenkinsci.plugins.ghprb.AutoMergeProcessor.DownstreamBuilds;
+import org.jenkinsci.plugins.ghprb.DownstreamJobsProcessor.DownstreamBuilds;
 import org.kohsuke.github.GHCommitState;
 import org.kohsuke.github.GHIssueState;
 import org.kohsuke.github.GHPullRequest;
@@ -208,7 +208,7 @@ public class GhprbBuilds {
 
 	public void merge(GHCommitState state, AbstractBuild currentBuild,GhprbTrigger mainTrigger) {
 		
-		
+		//check the cause for the build
 		GhprbCause c=null;
 		if(mainBuild!=null){
 			 c = getCauseForTheBuild(mainBuild);

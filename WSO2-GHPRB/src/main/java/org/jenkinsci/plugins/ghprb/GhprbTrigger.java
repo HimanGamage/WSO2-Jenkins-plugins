@@ -164,24 +164,27 @@ public class GhprbTrigger extends Trigger<AbstractProject<?, ?>> {
 		// completed so that the old (and incorrect)
 		// one isn't there
 
+		// check this build is blocked by another job
 		if (this.job.isBuildBlocked()
 				&& this.job.getCauseOfBlockage().getShortDescription()
 						.startsWith("Upstream project")) {
-			logger.log(Level.WARNING, this.job.getCauseOfBlockage().getShortDescription());
+			logger.log(Level.WARNING, this.job.getCauseOfBlockage()
+					.getShortDescription());
 
 			GhprbTrigger mainTrigger = GhprbTrigger
 					.getTrigger(findCauseProject(
 							this.job.getBuildingUpstream().getLastBuild())
 							.getProject());
 
-			//check
-//			GhprbBuildListener.getTriggerList().put(this,
-//					this.getGhprb().getBuilds());
+			// check
+			// GhprbBuildListener.getTriggerList().put(this,
+			// this.getGhprb().getBuilds());
 
 			if (!GhprbBuildListener.getSubTriggers().containsKey(mainTrigger)) {
 				List<GhprbTrigger> subTriggers = new ArrayList<GhprbTrigger>();
 				subTriggers.add(this);
-				GhprbBuildListener.getSubTriggers().put(mainTrigger, subTriggers);
+				GhprbBuildListener.getSubTriggers().put(mainTrigger,
+						subTriggers);
 			} else {
 				GhprbBuildListener.getSubTriggers().get(mainTrigger).add(this);
 			}
@@ -193,30 +196,29 @@ public class GhprbTrigger extends Trigger<AbstractProject<?, ?>> {
 		} else if (this.job.isBuildBlocked()
 				&& this.job.getCauseOfBlockage().getShortDescription()
 						.startsWith("Downstream project")) {
-			logger.log(Level.WARNING, this.job.getCauseOfBlockage().getShortDescription());
+			logger.log(Level.WARNING, this.job.getCauseOfBlockage()
+					.getShortDescription());
 
-			GhprbBuildListener.getPostBuilds().add(new ScheduleBuild2Details(this.job,job.getQuietPeriod(), cause,
-							new ParametersAction(values),
+			GhprbBuildListener.getPostBuilds().add(
+					new ScheduleBuild2Details(this.job, job.getQuietPeriod(),
+							cause, new ParametersAction(values),
 							findPreviousBuildForPullId(pullIdPv),
 							new RevisionParameterAction(commitSha)));
 
 			return null;
+		} else if (this.job.isBuilding()) {
+			logger.log(Level.WARNING, this.job.getName() + " is building");
+			GhprbBuildListener.getPostBuilds().add(
+					new ScheduleBuild2Details(this.job, job.getQuietPeriod(),
+							cause, new ParametersAction(values),
+							findPreviousBuildForPullId(pullIdPv),
+							new RevisionParameterAction(commitSha)));
+			return null;
 		} else {
-
-			if (this.job.isBuilding()) {
-				logger.log(Level.WARNING, this.job.getName()+" is building");
-				GhprbBuildListener.getPostBuilds().add(new ScheduleBuild2Details(this.job,job.getQuietPeriod(), cause,
-								new ParametersAction(values),
-								findPreviousBuildForPullId(pullIdPv),
-								new RevisionParameterAction(commitSha)));
-				return null;
-			} else {
-				return this.job.scheduleBuild2(job.getQuietPeriod(), cause,
-						new ParametersAction(values),
-						findPreviousBuildForPullId(pullIdPv),
-						new RevisionParameterAction(commitSha));
-			}
-
+			return this.job.scheduleBuild2(job.getQuietPeriod(), cause,
+					new ParametersAction(values),
+					findPreviousBuildForPullId(pullIdPv),
+					new RevisionParameterAction(commitSha));
 		}
 
 	}
@@ -422,7 +424,7 @@ public class GhprbTrigger extends Trigger<AbstractProject<?, ?>> {
 
 		@Override
 		public String getDisplayName() {
-			return "GitHub pull requests builder";
+			return "WSO2 GitHub pull requests builder";
 		}
 
 		@Override

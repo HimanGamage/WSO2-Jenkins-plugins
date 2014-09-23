@@ -12,7 +12,7 @@ import java.util.logging.Logger;
 import jenkins.model.Jenkins;
 
 import org.apache.tools.ant.property.GetProperty;
-import org.jenkinsci.plugins.ghprb.AutoMergeProcessor.DownstreamBuilds;
+import org.jenkinsci.plugins.ghprb.DownstreamJobsProcessor.DownstreamBuilds;
 import org.kohsuke.github.GHCommitState;
 import org.kohsuke.github.GHIssueState;
 import org.kohsuke.github.GHPullRequest;
@@ -78,178 +78,172 @@ public class GhprbBuildListener extends RunListener<AbstractBuild> {
 
 	@Override
 	public void onCompleted(AbstractBuild build, TaskListener listener) {
-		if (build instanceof AbstractBuild) {
 
-			Set<GhprbTrigger> triggerListKeySet = triggerList.keySet();
-			 for (GhprbTrigger t : triggerListKeySet) {
+		Set<GhprbTrigger> triggerListKeySet = triggerList.keySet();
 
-				try {
-					List<DownstreamBuilds> downstreamList = t.getGhprb()
-							.getBuilds().getDownstreamBuilds();
-					for (DownstreamBuilds db : downstreamList) {
+		outer_loop: for (GhprbTrigger t : triggerListKeySet) {
 
-						if (db.getProjectName() == build.getProject().getName()) {
-							AbstractBuild mainBuild = t.getGhprb().getBuilds()
-									.getMainBuild();
+			try {
+				// get the downstream builds of the trigger
+				List<DownstreamBuilds> downstreamList = t.getGhprb()
+						.getBuilds().getDownstreamBuilds();
 
-							LOG.log(Level.SEVERE, "-------------------MainBuild :"+mainBuild.getFullDisplayName());
-							
-							boolean returnStatus = findCause(build, mainBuild);
+				for (DownstreamBuilds db : downstreamList) {
+					// check the current compeleted build is a downstreambuild
+					// of a other build
+					if (db.getProjectName() == build.getProject().getName()) {
 
-							if (returnStatus) {
-								if (t.getGhprb().getBuilds().getBuildDetails() == null) {
+						AbstractBuild mainBuild = t.getGhprb().getBuilds()
+								.getMainBuild();
+
+						// check whether the build is caused by the main build
+						// of the trigger
+						boolean returnStatus = findCause(build, mainBuild);
+
+						if (returnStatus) {
+							if (t.getGhprb().getBuilds().getBuildDetails() == null) {
+								t.getGhprb()
+										.getBuilds()
+										.setBuildDetails(
+												new ConcurrentHashMap<String, AbstractBuild>());
+							}
+
+							// check the status of the build
+							if (build.getResult() == Result.SUCCESS) {
+								t.getGhprb()
+										.getBuilds()
+										.getBuildDetails()
+										.put(build.getProject().getName(),
+												build);
+								// check the main build completed it's
+								// downstream builds
+								if (t.getGhprb().getBuilds().getBuildDetails()
+										.size() == t.getGhprb().getBuilds()
+										.getDownstreamBuilds().size()) {
+
 									t.getGhprb()
 											.getBuilds()
-											.setBuildDetails(
-													new ConcurrentHashMap<String, AbstractBuild>());
+											.merge(GHCommitState.SUCCESS,
+													build, t);
+
+									mergeOtherPRs(GHCommitState.SUCCESS, build,
+											t);
+
+									t.getGhprb().getBuilds().setMainBuild(null);//
+									t.getGhprb().getBuilds()
+											.setBuildDetails(null);
+									startBlockedJobs();
+									break outer_loop;
+
 								}
 
-								if (build.getResult() == Result.SUCCESS) {
-									t.getGhprb()
-											.getBuilds()
-											.getBuildDetails()
-											.put(build.getProject().getName(),
-													build);
-									if (t.getGhprb().getBuilds()
-											.getBuildDetails().size() == t
-											.getGhprb().getBuilds()
-											.getDownstreamBuilds().size()) {
+							} else if (build.getResult() == Result.UNSTABLE) {
 
-										t.getGhprb()
-												.getBuilds()
-												.merge(GHCommitState.SUCCESS,
-														build, t);
-
-										mergeOtherPRs(GHCommitState.SUCCESS,
+								t.getGhprb()
+										.getBuilds()
+										.merge(GHCommitState.valueOf(GhprbTrigger
+												.getDscp().getUnstableAs()),
 												build, t);
 
-										t.getGhprb().getBuilds()
-												.setMainBuild(null);//
-										t.getGhprb().getBuilds()
-												.setBuildDetails(null);
-										startBlockedJobs();
-										triggerList.remove(t);
+								mergeOtherPRs(
+										GHCommitState.valueOf(GhprbTrigger
+												.getDscp().getUnstableAs()),
+										build, t);
+								t.getGhprb().getBuilds().setBuildDetails(null);
+								t.getGhprb().getBuilds().setMainBuild(null);//
+								startBlockedJobs();
+								break outer_loop;
+							} else {
 
-									}
+								t.getGhprb().getBuilds()
+										.merge(GHCommitState.FAILURE, build, t);
 
-								} else if (build.getResult() == Result.UNSTABLE) {
-
-									t.getGhprb()
-											.getBuilds()
-											.merge(GHCommitState
-													.valueOf(GhprbTrigger
-															.getDscp()
-															.getUnstableAs()),
-													build, t);
-
-									mergeOtherPRs(
-											GHCommitState.valueOf(GhprbTrigger
-													.getDscp().getUnstableAs()),
-											build, t);
-									t.getGhprb().getBuilds()
-											.setBuildDetails(null);
-									t.getGhprb().getBuilds().setMainBuild(null);//
-									startBlockedJobs();
-									triggerList.remove(t);
-
-								} else {
-
-									t.getGhprb()
-											.getBuilds()
-											.merge(GHCommitState.FAILURE,
-													build, t);
-
-									mergeOtherPRs(GHCommitState.FAILURE, build,
-											t);
-									t.getGhprb().getBuilds()
-											.setBuildDetails(null);
-									t.getGhprb().getBuilds().setMainBuild(null);//
-									triggerList.remove(t);
-									startBlockedJobs();
-
-								}
+								mergeOtherPRs(GHCommitState.FAILURE, build, t);
+								t.getGhprb().getBuilds().setBuildDetails(null);
+								t.getGhprb().getBuilds().setMainBuild(null);//
+								startBlockedJobs();
+								break outer_loop;
 
 							}
 
 						}
-					}
-				} catch (NullPointerException e) {
-					LOG.log(Level.SEVERE, "------------------- catch block "+e);
-					triggerList.remove(t);
-				}
 
+					}
+				}
+			} catch (NullPointerException e) {
+				LOG.log(Level.SEVERE, e + "");
+				// if the trigger removed for the job
+				triggerList.remove(t);
 			}
 
-			GhprbTrigger trigger = GhprbTrigger.getTrigger(build.getProject());// original
+		}
 
-			if (trigger != null) {
-				trigger.getGhprb().getBuilds().setMainBuild(build);
-				// set the downstream builds for the PR triggered project
-				if (trigger.getGhprb().getBuilds().getDownstreamBuilds() == null) {
+		GhprbTrigger trigger = GhprbTrigger.getTrigger(build.getProject());// original
+
+		// check the build is the main build
+		if (trigger != null && findCause(build, build)) {
+			trigger.getGhprb().getBuilds().setMainBuild(build);
+			// set the downstream builds for the PR triggered project
+			if (trigger.getGhprb().getBuilds().getDownstreamBuilds() == null) {
+				trigger.getGhprb()
+						.getBuilds()
+						.setDownstreamBuilds(
+								new DownstreamJobsProcessor()
+										.getDownstreamBuildList(build));
+			}
+
+			// add the trigger to the trigger list
+			if (!triggerList.containsKey(trigger)) {
+				triggerList.put(trigger, trigger.getGhprb().getBuilds());
+			}
+
+			// check this build is triggered by a GHPRB trigger
+			boolean isCaused = findCause(build, trigger.getGhprb().getBuilds()
+					.getMainBuild());
+			if (isCaused) {
+				if (build.getResult() == Result.SUCCESS) {
+					if (trigger.getGhprb().getBuilds().getDownstreamBuilds()
+							.size() == 0) {
+						trigger.getGhprb().getBuilds()
+								.merge(GHCommitState.SUCCESS, build, trigger);
+
+						mergeOtherPRs(GHCommitState.SUCCESS, build, trigger);
+						trigger.getGhprb().getBuilds().setBuildDetails(null);
+						trigger.getGhprb().getBuilds().setMainBuild(null);//
+						startBlockedJobs();
+
+					}
+
+				} else if (build.getResult() == Result.UNSTABLE) {
+
 					trigger.getGhprb()
 							.getBuilds()
-							.setDownstreamBuilds(
-									new AutoMergeProcessor()
-											.getDownstreamBuildList(build));
-				}
+							.merge(GHCommitState.valueOf(GhprbTrigger.getDscp()
+									.getUnstableAs()), build, trigger);
 
-				if (!triggerList.containsKey(trigger)) {
-					triggerList.put(trigger, trigger.getGhprb().getBuilds());
-				}
+					mergeOtherPRs(GHCommitState.valueOf(GhprbTrigger.getDscp()
+							.getUnstableAs()), build, trigger);
+					trigger.getGhprb().getBuilds().setBuildDetails(null);
+					trigger.getGhprb().getBuilds().setMainBuild(null);//
+					startBlockedJobs();
 
-				boolean isCaused = findCause(build, trigger.getGhprb()
-						.getBuilds().getMainBuild());
-				if (isCaused) {
-					if (build.getResult() == Result.SUCCESS) {
-						if (trigger.getGhprb().getBuilds()
-								.getDownstreamBuilds().size() == 0) {
-							trigger.getGhprb()
-									.getBuilds()
-									.merge(GHCommitState.SUCCESS, build,
-											trigger);
+				} else {
 
-							mergeOtherPRs(GHCommitState.SUCCESS, build, trigger);
-							trigger.getGhprb().getBuilds()
-									.setBuildDetails(null);
-							trigger.getGhprb().getBuilds().setMainBuild(null);//
-							triggerList.remove(trigger);
-							startBlockedJobs();
+					trigger.getGhprb().getBuilds()
+							.merge(GHCommitState.FAILURE, build, trigger);
 
-						}
+					mergeOtherPRs(GHCommitState.FAILURE, build, trigger);
 
-					} else if (build.getResult() == Result.UNSTABLE) {
-
-						trigger.getGhprb()
-								.getBuilds()
-								.merge(GHCommitState.valueOf(GhprbTrigger
-										.getDscp().getUnstableAs()), build,
-										trigger);
-
-						mergeOtherPRs(GHCommitState.valueOf(GhprbTrigger
-								.getDscp().getUnstableAs()), build, trigger);
-						trigger.getGhprb().getBuilds().setBuildDetails(null);
-						trigger.getGhprb().getBuilds().setMainBuild(null);//
-						triggerList.remove(trigger);
-						startBlockedJobs();
-
-					} else {
-
-						trigger.getGhprb().getBuilds()
-								.merge(GHCommitState.FAILURE, build, trigger);
-
-						mergeOtherPRs(GHCommitState.FAILURE, build, trigger);
-
-						trigger.getGhprb().getBuilds().setBuildDetails(null);
-						trigger.getGhprb().getBuilds().setMainBuild(null);//
-						triggerList.remove(trigger);
-						startBlockedJobs();
-
-					}
+					trigger.getGhprb().getBuilds().setBuildDetails(null);
+					trigger.getGhprb().getBuilds().setMainBuild(null);//
+					startBlockedJobs();
 
 				}
 
 			}
-		}
+
+		} 
+
 	}
 
 	private void mergeOtherPRs(GHCommitState commitState, AbstractBuild build,
@@ -270,9 +264,9 @@ public class GhprbBuildListener extends RunListener<AbstractBuild> {
 
 		for (ScheduleBuild2Details scheduledBuildDetails : postBuilds) {
 
-			if (!scheduledBuildDetails.getProject().isBuildBlocked() && !scheduledBuildDetails.getProject().isBuilding()) {
+			if (!scheduledBuildDetails.getProject().isBuildBlocked()
+					&& !scheduledBuildDetails.getProject().isBuilding()) {
 
-				
 				scheduledBuildDetails.getProject().scheduleBuild2(
 						scheduledBuildDetails.getQuietPeriod(),
 						scheduledBuildDetails.getCause(),
@@ -280,8 +274,9 @@ public class GhprbBuildListener extends RunListener<AbstractBuild> {
 						scheduledBuildDetails.getBuildData(),
 						scheduledBuildDetails.getRevisionParameterAction());
 				removeList.add(scheduledBuildDetails);
-			}else{
-				LOG.log(Level.WARNING,scheduledBuildDetails.getProject()+" is waiting");
+			} else {
+				LOG.log(Level.WARNING, scheduledBuildDetails.getProject()
+						+ " is waiting");
 			}
 		}
 
