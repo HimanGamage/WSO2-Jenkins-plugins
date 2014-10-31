@@ -12,7 +12,6 @@ import java.util.logging.Logger;
 import jenkins.model.Jenkins;
 
 import org.apache.tools.ant.property.GetProperty;
-import org.jenkinsci.plugins.ghprb.DownstreamJobsProcessor.DownstreamBuilds;
 import org.kohsuke.github.GHCommitState;
 import org.kohsuke.github.GHIssueState;
 import org.kohsuke.github.GHPullRequest;
@@ -85,13 +84,13 @@ public class GhprbBuildListener extends RunListener<AbstractBuild> {
 
 			try {
 				// get the downstream builds of the trigger
-				List<DownstreamBuilds> downstreamList = t.getGhprb()
-						.getBuilds().getDownstreamBuilds();
+				List<AbstractProject> downstreamList = t.getGhprb().getBuilds()
+						.getDownstreamBuilds();
 
-				for (DownstreamBuilds db : downstreamList) {
+				for (AbstractProject db : downstreamList) {
 					// check the current compeleted build is a downstreambuild
 					// of a other build
-					if (db.getProjectName() == build.getProject().getName()) {
+					if (db.getName() == build.getProject().getName()) {
 
 						AbstractBuild mainBuild = t.getGhprb().getBuilds()
 								.getMainBuild();
@@ -128,10 +127,7 @@ public class GhprbBuildListener extends RunListener<AbstractBuild> {
 
 									mergeOtherPRs(GHCommitState.SUCCESS, build,
 											t);
-
-									t.getGhprb().getBuilds().setMainBuild(null);//
-									t.getGhprb().getBuilds()
-											.setBuildDetails(null);
+									clearData(t);
 									startBlockedJobs();
 									break outer_loop;
 
@@ -149,18 +145,18 @@ public class GhprbBuildListener extends RunListener<AbstractBuild> {
 										GHCommitState.valueOf(GhprbTrigger
 												.getDscp().getUnstableAs()),
 										build, t);
-								t.getGhprb().getBuilds().setBuildDetails(null);
-								t.getGhprb().getBuilds().setMainBuild(null);//
+								clearData(t);
 								startBlockedJobs();
 								break outer_loop;
+
 							} else {
 
 								t.getGhprb().getBuilds()
 										.merge(GHCommitState.FAILURE, build, t);
 
 								mergeOtherPRs(GHCommitState.FAILURE, build, t);
-								t.getGhprb().getBuilds().setBuildDetails(null);
-								t.getGhprb().getBuilds().setMainBuild(null);//
+
+								clearData(t);
 								startBlockedJobs();
 								break outer_loop;
 
@@ -208,8 +204,7 @@ public class GhprbBuildListener extends RunListener<AbstractBuild> {
 								.merge(GHCommitState.SUCCESS, build, trigger);
 
 						mergeOtherPRs(GHCommitState.SUCCESS, build, trigger);
-						trigger.getGhprb().getBuilds().setBuildDetails(null);
-						trigger.getGhprb().getBuilds().setMainBuild(null);//
+						clearData(trigger);
 						startBlockedJobs();
 
 					}
@@ -223,8 +218,7 @@ public class GhprbBuildListener extends RunListener<AbstractBuild> {
 
 					mergeOtherPRs(GHCommitState.valueOf(GhprbTrigger.getDscp()
 							.getUnstableAs()), build, trigger);
-					trigger.getGhprb().getBuilds().setBuildDetails(null);
-					trigger.getGhprb().getBuilds().setMainBuild(null);//
+					clearData(trigger);
 					startBlockedJobs();
 
 				} else {
@@ -234,15 +228,14 @@ public class GhprbBuildListener extends RunListener<AbstractBuild> {
 
 					mergeOtherPRs(GHCommitState.FAILURE, build, trigger);
 
-					trigger.getGhprb().getBuilds().setBuildDetails(null);
-					trigger.getGhprb().getBuilds().setMainBuild(null);//
+					clearData(trigger);
 					startBlockedJobs();
 
 				}
 
 			}
 
-		} 
+		}
 
 	}
 
@@ -257,6 +250,13 @@ public class GhprbBuildListener extends RunListener<AbstractBuild> {
 			}
 			subTriggers.remove(trigger);
 		}
+	}
+
+	private void clearData(GhprbTrigger t) {
+
+	
+		t.getGhprb().getBuilds().setBuildDetails(null);
+		t.getGhprb().getBuilds().setMainBuild(null);//
 	}
 
 	private void startBlockedJobs() {

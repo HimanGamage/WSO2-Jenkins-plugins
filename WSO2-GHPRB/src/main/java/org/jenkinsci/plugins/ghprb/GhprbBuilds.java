@@ -11,7 +11,6 @@ import hudson.model.queue.QueueTaskFuture;
 import hudson.plugins.git.util.BuildData;
 import jenkins.model.Jenkins;
 
-import org.jenkinsci.plugins.ghprb.DownstreamJobsProcessor.DownstreamBuilds;
 import org.kohsuke.github.GHCommitState;
 import org.kohsuke.github.GHIssueState;
 import org.kohsuke.github.GHPullRequest;
@@ -41,7 +40,7 @@ public class GhprbBuilds {
 	private AbstractBuild mainBuild;
 	private GhprbRepository repo;
 
-	private List<DownstreamBuilds> downstreamBuilds;
+	private List<AbstractProject> downstreamBuilds;
 	private Map<String, AbstractBuild> buildDetails;
 
 
@@ -79,11 +78,11 @@ public class GhprbBuilds {
 		this.mainBuild = mainBuild;
 	}
 
-	public List<DownstreamBuilds> getDownstreamBuilds() {
+	public List<AbstractProject> getDownstreamBuilds() {
 		return downstreamBuilds;
 	}
 
-	public void setDownstreamBuilds(List<DownstreamBuilds> downstreamBuilds) {
+	public void setDownstreamBuilds(List<AbstractProject> downstreamBuilds) {
 		this.downstreamBuilds = downstreamBuilds;
 	}
 
