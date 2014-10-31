@@ -1,0 +1,6 @@
+org.kohsuke.github.GHCommit$ShortInfo
+org.kohsuke.github.GHCompare$InnerCommit
+org.kohsuke.github.GHPullRequestCommitDetail$Commit
+org.kohsuke.github.GHRepository
+org.kohsuke.github.GHUser
+org.kohsuke.github.GitHub
